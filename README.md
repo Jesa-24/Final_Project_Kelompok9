@@ -10,6 +10,10 @@ Sistem RAG untuk tanya jawab berbasis dokumen menggunakan **Google Gemini API**.
 - 🖥️ **Streamlit** — Web UI
 
 ---
+---
+Karena ukuran dataset dan database (vectorstore) yang mencapai 2GB, silakan unduh di sini:
+👉 **[https://drive.google.com/drive/folders/1iW7WlApI8RujHzHY8vSvBzdLpN94H1Go?usp=sharing]**
+---
 
 ## 🚀 Setup (3 Langkah)
 
