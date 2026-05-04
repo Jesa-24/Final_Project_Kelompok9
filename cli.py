@@ -93,6 +93,25 @@ def load_vectorstore():
     return vs_manager
 
 
+def delete_document(filename: str):
+    docs_path = Path(DOCS_DIR) / filename
+    if not docs_path.exists() or not docs_path.is_file():
+        print(f"File tidak ditemukan di folder dokumen: {filename}")
+        return
+
+    try:
+        docs_path.unlink()
+        print(f"File '{filename}' berhasil dihapus dari {DOCS_DIR}")
+        vs_manager = VectorStoreManager(
+            embedding_model=EMBEDDING_MODEL,
+            persist_directory=VECTORSTORE_DIR,
+        )
+        vs_manager.clear_vectorstore()
+        print("Indeks lama dibersihkan. Jalankan kembali --index untuk membangun ulang vector store.")
+    except Exception as e:
+        print(f"Gagal menghapus file: {e}")
+
+
 def interactive_chat(vs_manager):
     print("\n" + "="*60)
     print(" RAG EXPERT SYSTEM - Chat (Gemini)")
@@ -153,6 +172,7 @@ def main():
     parser.add_argument("--index", action="store_true", help="Index dokumen")
     parser.add_argument("--chat", action="store_true", help="Mode chat interaktif")
     parser.add_argument("--ask", type=str, help="Tanya satu pertanyaan")
+    parser.add_argument("--delete", type=str, metavar="FILE", help="Hapus dokumen dari folder penyimpanan")
     parser.add_argument("--status", action="store_true", help="Cek status")
     args = parser.parse_args()
 
@@ -169,6 +189,10 @@ def main():
 
     if args.index:
         index_documents()
+        sys.exit(0)
+
+    if args.delete:
+        delete_document(args.delete)
         sys.exit(0)
 
     vs_manager = load_vectorstore()

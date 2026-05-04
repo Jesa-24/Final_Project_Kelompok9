@@ -1,3 +1,10 @@
 [server]
 # Menonaktifkan file watcher untuk menghindari warning dari torch
 fileWatcherType = "none"
+
+[theme]
+primaryColor = "#6C63FF"
+backgroundColor = "#0f0f1a"
+secondaryBackgroundColor = "#1a1a2e"
+textColor = "#e0e0e0"
+font = "sans serif"

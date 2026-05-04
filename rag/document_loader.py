@@ -60,7 +60,7 @@ class DocumentLoader:
                 f"Format yang didukung: {list(self.SUPPORTED_EXTENSIONS.keys())}"
             )
 
-        print(f"[📄] Memuat {self.SUPPORTED_EXTENSIONS[ext]}: {path.name}")
+        print(f"[Loader] Memuat {self.SUPPORTED_EXTENSIONS[ext]}: {path.name}")
 
         try:
             if ext == ".pdf":
@@ -80,11 +80,11 @@ class DocumentLoader:
                 doc.metadata["file_type"] = self.SUPPORTED_EXTENSIONS[ext]
 
             self.loaded_files.append(path.name)
-            print(f"   ✅ Berhasil dimuat: {len(docs)} halaman/bagian")
+            print(f"   Berhasil dimuat: {len(docs)} halaman/bagian")
             return docs
 
         except Exception as e:
-            print(f"   ❌ Gagal memuat {path.name}: {e}")
+            print(f"   Gagal memuat {path.name}: {e}")
             raise
 
     def load_directory(self, directory_path: str) -> List[Document]:
@@ -110,11 +110,11 @@ class DocumentLoader:
         ]
 
         if not supported_files:
-            print(f"⚠️  Tidak ada file yang didukung di folder: {directory_path}")
+            print(f"Tidak ada file yang didukung di folder: {directory_path}")
             print(f"   Format yang didukung: {list(self.SUPPORTED_EXTENSIONS.keys())}")
             return []
 
-        print(f"\n[📁] Ditemukan {len(supported_files)} file di '{directory_path}':")
+        print(f"\n[Loader] Ditemukan {len(supported_files)} file di '{directory_path}':")
         for f in supported_files:
             print(f"   - {f.name}")
 
@@ -124,15 +124,36 @@ class DocumentLoader:
                 docs = self.load_file(str(file_path))
                 all_docs.extend(docs)
             except Exception as e:
-                print(f"   ⚠️  Melewati {file_path.name}: {e}")
+                print(f"   Melewati {file_path.name}: {e}")
 
-        print(f"\n[✅] Total dokumen dimuat: {len(all_docs)} bagian dari {len(supported_files)} file\n")
+        print(f"\n[Loader] Total dokumen dimuat: {len(all_docs)} bagian dari {len(supported_files)} file\n")
         return all_docs
 
     def _load_pdf(self, file_path: str) -> List[Document]:
-        """Memuat file PDF menggunakan PyPDFLoader."""
+        """
+        Memuat file PDF menggunakan PyPDFLoader.
+        Memproses setiap halaman dan memastikan semua halaman ter-extract.
+        """
         loader = PyPDFLoader(file_path)
-        return loader.load()
+        docs = loader.load()
+        
+        # Filter halaman kosong dan pastikan semua halaman punya konten
+        valid_docs = []
+        for doc in docs:
+            content = doc.page_content.strip()
+            if content and len(content) > 10:  # Skip halaman yang hampir kosong
+                valid_docs.append(doc)
+            elif content:
+                # Halaman dengan sedikit teks tetap disimpan tapi di-log
+                valid_docs.append(doc)
+                page = doc.metadata.get("page", "?")
+                print(f"   [Info] Halaman {page} memiliki sedikit teks ({len(content)} karakter)")
+        
+        if not valid_docs and docs:
+            # Jika semua halaman difilter, kembalikan dokumen asli
+            return docs
+            
+        return valid_docs
 
     def _load_pptx(self, file_path: str) -> List[Document]:
         """Memuat file PowerPoint menggunakan UnstructuredPowerPointLoader."""

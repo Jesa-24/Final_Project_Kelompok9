@@ -28,14 +28,14 @@ class VectorStoreManager:
 
     def __init__(
         self,
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",
         persist_directory: str = "./vectorstore",
         collection_name: str = "rag_documents",
     ):
         """
         Args:
             embedding_model: Nama model HuggingFace untuk embedding
-                             (default: all-MiniLM-L6-v2 - ringan & bagus)
+                             (default: all-mpnet-base-v2 - 768 dim, lebih akurat)
             persist_directory: Folder penyimpanan ChromaDB
             collection_name: Nama koleksi di ChromaDB
         """
@@ -44,7 +44,7 @@ class VectorStoreManager:
         self.collection_name = collection_name
         self.vectorstore: Optional[Chroma] = None
 
-        print(f"[🔧] Inisialisasi Embedding Model: {embedding_model}")
+        print(f"[VectorStore] Inisialisasi Embedding Model: {embedding_model}")
         print(f"     (Download pertama kali mungkin butuh beberapa menit...)\n")
 
         # Inisialisasi model embedding
@@ -53,7 +53,7 @@ class VectorStoreManager:
             model_kwargs={"device": "cpu"},   # Ganti ke "cuda" jika punya GPU
             encode_kwargs={"normalize_embeddings": True},
         )
-        print("     ✅ Embedding model siap!\n")
+        print("     Embedding model siap!\n")
 
     def create_vectorstore(self, chunks: List[Document]) -> Chroma:
         """
@@ -69,7 +69,7 @@ class VectorStoreManager:
         if not chunks:
             raise ValueError("Tidak ada chunks untuk dimasukkan ke vector store!")
 
-        print(f"[💾] Membuat vector store dari {len(chunks)} chunks...")
+        print(f"[VectorStore] Membuat vector store dari {len(chunks)} chunks...")
         print(f"     Database: ChromaDB")
         print(f"     Lokasi  : {self.persist_directory}")
         print(f"     Koleksi : {self.collection_name}\n")
@@ -78,7 +78,7 @@ class VectorStoreManager:
         if os.path.exists(self.persist_directory):
             import shutil
             shutil.rmtree(self.persist_directory)
-            print("     🗑️  Vector store lama dihapus.")
+            print("     Vector store lama dihapus.")
 
         # Buat vectorstore baru
         self.vectorstore = Chroma.from_documents(
@@ -88,7 +88,7 @@ class VectorStoreManager:
             collection_name=self.collection_name,
         )
 
-        print(f"     ✅ Vector store berhasil dibuat!\n")
+        print(f"     Vector store berhasil dibuat!\n")
         return self.vectorstore
 
     def load_vectorstore(self) -> Optional[Chroma]:
@@ -99,10 +99,10 @@ class VectorStoreManager:
             Chroma vectorstore atau None jika belum ada
         """
         if not os.path.exists(self.persist_directory):
-            print("⚠️  Vector store belum ada. Silakan upload dokumen terlebih dahulu.")
+            print("Vector store belum ada. Silakan upload dokumen terlebih dahulu.")
             return None
 
-        print(f"[📂] Memuat vector store dari '{self.persist_directory}'...")
+        print(f"[VectorStore] Memuat vector store dari '{self.persist_directory}'...")
 
         self.vectorstore = Chroma(
             persist_directory=self.persist_directory,
@@ -111,8 +111,16 @@ class VectorStoreManager:
         )
 
         count = self.vectorstore._collection.count()
-        print(f"     ✅ Vector store dimuat: {count} chunks tersimpan\n")
+        print(f"     Vector store dimuat: {count} chunks tersimpan\n")
         return self.vectorstore
+
+    def clear_vectorstore(self) -> None:
+        """Hapus data vector store yang tersimpan sehingga harus diindeks ulang."""
+        if os.path.exists(self.persist_directory):
+            import shutil
+            shutil.rmtree(self.persist_directory)
+            print(f"[VectorStore] Vector store dihapus dari '{self.persist_directory}'.")
+        self.vectorstore = None
 
     def add_documents(self, chunks: List[Document]) -> None:
         """
@@ -127,15 +135,14 @@ class VectorStoreManager:
                 self.create_vectorstore(chunks)
                 return
 
-        print(f"[➕] Menambahkan {len(chunks)} chunks ke vector store...")
+        print(f"[VectorStore] Menambahkan {len(chunks)} chunks ke vector store...")
         self.vectorstore.add_documents(chunks)
-        print(f"     ✅ Berhasil ditambahkan!\n")
+        print(f"     Berhasil ditambahkan!\n")
 
     def similarity_search(
         self,
         query: str,
-        k: int = 5,
-        score_threshold: float = 0.3,
+        k: int = 10,
     ) -> List[Tuple[Document, float]]:
         """
         Mencari dokumen yang paling relevan dengan query.
@@ -143,7 +150,6 @@ class VectorStoreManager:
         Args:
             query: Pertanyaan/query dari pengguna
             k: Jumlah dokumen yang dikembalikan
-            score_threshold: Threshold minimum similarity score
 
         Returns:
             List tuple (Document, score) yang paling relevan
@@ -154,9 +160,11 @@ class VectorStoreManager:
         results = self.vectorstore.similarity_search_with_score(query, k=k)
         return results
 
-    def as_retriever(self, k: int = 5):
+    def as_retriever(self, k: int = 10):
         """
         Mengembalikan retriever untuk digunakan di RAG chain.
+        Menggunakan MMR (Maximal Marginal Relevance) untuk mendapatkan
+        hasil yang beragam - tidak hanya chunk yang mirip satu sama lain.
 
         Args:
             k: Jumlah dokumen yang dikembalikan per query
@@ -168,8 +176,12 @@ class VectorStoreManager:
             raise ValueError("Vector store belum diinisialisasi!")
 
         return self.vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": k},
+            search_type="mmr",
+            search_kwargs={
+                "k": k,
+                "fetch_k": k * 3,   # Fetch 3x lebih banyak, lalu pilih yang paling beragam
+                "lambda_mult": 0.7,  # 0=max diversity, 1=max relevance
+            },
         )
 
     def get_document_count(self) -> int:
@@ -181,55 +193,3 @@ class VectorStoreManager:
     def is_ready(self) -> bool:
         """Mengecek apakah vector store sudah siap digunakan."""
         return self.vectorstore is not None and self.get_document_count() > 0
-
-    def search_with_fallback(
-        self,
-        query: str,
-        k: int = 5,
-    ) -> List[Document]:
-        """
-        Mencari dokumen dengan fallback untuk bagian akhir dokumen.
-        
-        Jika pencarian pertama tidak menemukan hasil yang baik,
-        akan melakukan pencarian tambahan dengan kata kunci khusus
-        untuk bagian daftar pustaka/referensi.
-
-        Args:
-            query: Pertanyaan dari pengguna
-            k: Jumlah dokumen yang dikembalikan
-
-        Returns:
-            List dokumen yang relevan
-        """
-        if self.vectorstore is None:
-            raise ValueError("Vector store belum diinisialisasi!")
-        
-        # Pertama, coba pencarian biasa
-        results = self.vectorstore.similarity_search(query, k=k)
-        
-        # Cek apakah ada hasil yang berisi referensi
-        has_reference_results = any(
-            doc.metadata.get("has_references", False) 
-            for doc in results
-        )
-        
-        if not has_reference_results:
-            # Fallback: cari dengan kata kunci khusus
-            fallback_keywords = [
-                "referensi", "daftar pustaka", "bibliografi",
-                "references", "bibliography", "cited"
-            ]
-            
-            for keyword in fallback_keywords:
-                try:
-                    fallback_results = self.vectorstore.similarity_search(
-                        keyword, k=k
-                    )
-                    # Gabungkan dengan hasil yang ada
-                    for doc in fallback_results:
-                        if doc not in results:
-                            results.append(doc)
-                except Exception:
-                    continue
-        
-        return results[:k]

@@ -65,26 +65,7 @@ rag-expert-system-gemini/
 └── data/documents/         ← Taruh dokumen di sini
 ```
 
----
 
-## ⚙️ Konfigurasi (.env)
-
-| Variable | Default | Keterangan |
-|----------|---------|------------|
-| `GOOGLE_API_KEY` | *(wajib diisi)* | API key dari Google AI Studio |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Model Gemini |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Model embedding lokal |
-| `CHUNK_SIZE` | `1000` | Ukuran chunk (karakter) |
-| `TOP_K_RESULTS` | `5` | Jumlah dokumen yang diambil |
-
-### Model Gemini yang direkomendasikan:
-| Model | Kecepatan | Limit Gratis |
-|-------|-----------|-------------|
-| `gemini-2.5-flash` | ⚡ Cepat | Cek kuota terbaru di Google AI Studio |
-| `gemini-2.5-flash-lite` | ⚡⚡ Lebih ringan | Cek kuota terbaru di Google AI Studio |
-| `gemini-2.5-pro` | 🧠 Lebih pintar | Cek kuota terbaru di Google AI Studio |
-
----
 
 ## 💡 Cara Pakai
 
@@ -93,13 +74,3 @@ rag-expert-system-gemini/
 3. Tanya di kotak chat → Gemini menjawab + tampilkan sumber
 
 ---
-
-## 🆚 Gemini vs Ollama
-
-| | Gemini (versi ini) | Ollama |
-|-|-------------------|--------|
-| Setup | Mudah (API key saja) | Install Ollama + pull model |
-| RAM | Tidak butuh banyak | Butuh 4-8GB RAM |
-| Internet | Perlu | Tidak perlu |
-| Biaya | Gratis (limit) | Gratis (unlimited lokal) |
-| Kualitas | Sangat baik | Tergantung model |

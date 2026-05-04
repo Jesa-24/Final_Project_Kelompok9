@@ -16,27 +16,13 @@ class TextChunker:
     Memecah dokumen besar menjadi chunk-chunk kecil (potongan teks).
     
     Menggunakan RecursiveCharacterTextSplitter yang memecah teks
-    secara rekursif berdasarkan separator (paragraf → kalimat → kata).
-    
-    Juga mendeteksi posisi chunk dalam dokumen (awal, tengah, akhir)
-    untuk membantu pencarian bagian khusus seperti daftar pustaka.
+    secara rekursif berdasarkan separator (paragraf -> kalimat -> kata).
     """
-
-    # Pattern untuk mendeteksi bagian akhir dokumen
-    END_PATTERNS = [
-        r'daftar\s+pustaka',
-        r'bibliografi',
-        r'referensi',
-        r'laman\s+referensi',
-        r'cited\s+references',
-        r'bibliography',
-        r'references\s*$',
-    ]
 
     def __init__(
         self,
-        chunk_size: int = 2000,
-        chunk_overlap: int = 400,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 300,
     ):
         """
         Args:
@@ -52,8 +38,24 @@ class TextChunker:
             chunk_overlap=chunk_overlap,
             length_function=len,
             # Separator diurutkan dari yang paling diutamakan
-            separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""],
+            separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""],
         )
+
+    def _clean_text(self, text: str) -> str:
+        """
+        Membersihkan teks dari karakter yang tidak perlu.
+        Membantu embedding model menghasilkan vektor yang lebih akurat.
+        """
+        # Hapus multiple whitespace berturut-turut
+        text = re.sub(r'[ \t]+', ' ', text)
+        # Hapus baris kosong berlebih (lebih dari 2 berturut)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        # Hapus karakter null/kontrol
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
+        # Trim setiap baris
+        lines = [line.strip() for line in text.split('\n')]
+        text = '\n'.join(lines)
+        return text.strip()
 
     def split_documents(self, documents: List[Document]) -> List[Document]:
         """
@@ -66,40 +68,33 @@ class TextChunker:
             List dokumen yang sudah dipecah menjadi chunk
         """
         if not documents:
-            print("⚠️  Tidak ada dokumen untuk dipecah.")
+            print("Tidak ada dokumen untuk dipecah.")
             return []
 
-        print(f"[✂️ ] Memecah {len(documents)} dokumen menjadi chunks...")
+        print(f"[TextChunker] Memecah {len(documents)} dokumen menjadi chunks...")
         print(f"     Ukuran chunk: {self.chunk_size} karakter")
         print(f"     Overlap     : {self.chunk_overlap} karakter")
 
-        chunks = self.splitter.split_documents(documents)
+        # Bersihkan teks sebelum splitting
+        cleaned_docs = []
+        for doc in documents:
+            cleaned = self._clean_text(doc.page_content)
+            if cleaned:  # Hanya masukkan jika ada konten
+                new_doc = Document(
+                    page_content=cleaned,
+                    metadata=doc.metadata.copy()
+                )
+                cleaned_docs.append(new_doc)
 
-        # Tambahkan nomor chunk dan posisi dalam dokumen ke metadata
+        chunks = self.splitter.split_documents(cleaned_docs)
+
+        # Tambahkan nomor chunk ke metadata
         total_chunks = len(chunks)
         for i, chunk in enumerate(chunks):
             chunk.metadata["chunk_id"] = i
             chunk.metadata["chunk_total"] = total_chunks
-            
-            # Deteksi posisi dalam dokumen (awal/tengah/akhir)
-            position_ratio = i / total_chunks if total_chunks > 0 else 0
-            if position_ratio < 0.3:
-                chunk.metadata["position"] = "awal"
-            elif position_ratio < 0.7:
-                chunk.metadata["position"] = "tengah"
-            else:
-                chunk.metadata["position"] = "akhir"
-            
-            # Deteksi apakah chunk ini berisi bagian daftar pustaka/referensi
-            content_lower = chunk.page_content.lower()
-            for pattern in self.END_PATTERNS:
-                if re.search(pattern, content_lower):
-                    chunk.metadata["has_references"] = True
-                    break
-            else:
-                chunk.metadata["has_references"] = False
 
-        print(f"     ✅ Total chunks dihasilkan: {len(chunks)}\n")
+        print(f"     Total chunks dihasilkan: {len(chunks)}\n")
         return chunks
 
     def split_text(self, text: str) -> List[str]:

@@ -15,15 +15,17 @@ from langchain_core.documents import Document
 
 from utils.helpers import normalize_gemini_model
 
-RAG_PROMPT_TEMPLATE = """Kamu adalah asisten AI yang membantu menjawab pertanyaan berdasarkan dokumen yang diberikan.
+RAG_PROMPT_TEMPLATE = """Kamu adalah asisten AI Expert System yang bertugas menjawab pertanyaan berdasarkan dokumen yang diberikan.
 
-INSTRUKSI:
-- Jawab HANYA berdasarkan konteks/dokumen yang disediakan di bawah.
-- Jika informasi tidak ada di konteks, katakan "Saya tidak menemukan informasi tersebut di dokumen yang tersedia."
-- Berikan jawaban yang jelas, terstruktur, dan informatif.
-- Jika relevan, sebutkan sumber informasi dari dokumen mana.
-- Jawab dalam Bahasa Indonesia kecuali jika pertanyaan dalam Bahasa Inggris.
-- PERHATIAN KHUSUS: Jika pertanyaan tentang daftar pustaka, referensi, atau bibliografi, carilah di bagian akhir dokumen. Bagian ini biasanya berisi informasi lengkap tentang sumber-sumber yang digunakan penulis.
+ATURAN WAJIB:
+1. Baca dan analisis SELURUH konteks dokumen di bawah secara menyeluruh dari awal hingga akhir sebelum menjawab.
+2. Jawab berdasarkan konteks/dokumen yang disediakan.
+3. Berikan jawaban yang lengkap, jelas, terstruktur, dan informatif.
+4. Jika ada informasi yang relevan di konteks, WAJIB sebutkan. Jangan langsung bilang "tidak ditemukan" sebelum membaca semua konteks.
+5. Jika relevan, sebutkan dari sumber/halaman mana informasi tersebut berasal.
+6. Jawab dalam Bahasa Indonesia kecuali jika pertanyaan dalam Bahasa Inggris.
+7. Jika pertanyaan meminta daftar, buat dalam format bernomor yang rapi.
+8. HANYA jika setelah membaca seluruh konteks benar-benar tidak ada informasi yang relevan sama sekali, barulah katakan bahwa informasi tersebut tidak ditemukan di dokumen.
 
 KONTEKS DARI DOKUMEN:
 {context}
@@ -53,7 +55,7 @@ class RAGChain:
         gemini_model: str = "gemini-2.5-flash",
         google_api_key: Optional[str] = None,
         temperature: float = 0.1,
-        top_k_results: int = 5,
+        top_k_results: int = 10,
     ):
         self.model_name = normalize_gemini_model(gemini_model)
         self.top_k = top_k_results
@@ -68,12 +70,13 @@ class RAGChain:
                 "Lalu isi di file .env: GOOGLE_API_KEY=api_key_kamu"
             )
 
-        print(f"[Inisialisasi] LLM: Google Gemini ({self.model_name})")
+        print(f"[RAGChain] LLM: Google Gemini ({self.model_name})")
 
         self.llm = ChatGoogleGenerativeAI(
             model=self.model_name,
             google_api_key=api_key,
             temperature=temperature,
+            max_output_tokens=8192,
         )
 
         self.prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
@@ -97,27 +100,6 @@ class RAGChain:
         if self.chain is None:
             raise ValueError("RAG chain belum diinisialisasi!")
         return self.chain.invoke(question)
-
-    def ask_with_fallback(self, question: str) -> str:
-        """
-        Menjawab pertanyaan dengan menggunakan fallback search.
-        Berguna untuk pertanyaan tentang bagian akhir dokumen seperti daftar pustaka.
-        """
-        if self.chain is None:
-            raise ValueError("RAG chain belum diinisialisasi!")
-        
-        # Cek apakah retriever memiliki method search_with_fallback
-        if hasattr(self.retriever, 'vectorstore') and hasattr(self.retriever.vectorstore, 'search_with_fallback'):
-            # Gunakan fallback search
-            docs = self.retriever.vectorstore.search_with_fallback(question, k=self.top_k)
-            if docs:
-                from langchain_core.runnables import RunnablePassthrough
-                formatted_context = format_docs(docs)
-                # Invoke chain dengan context manual
-                return self.chain.invoke({"context": formatted_context, "question": question})
-        
-        # Fallback ke method biasa
-        return self.ask(question)
 
     def ask_with_sources(self, question: str) -> dict:
         if self.chain is None:
